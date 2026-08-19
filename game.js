@@ -437,8 +437,52 @@ function playable(p){return(p.devCards||[]).filter(c=>!VP_TYPES.has(c.type)&&c.b
 async function playDev(id){const pi=myIndex(),card=state.players[pi].devCards.find(c=>c.id===id);if(!card)return;if(card.type==='yearPlenty'){modal={type:'year',id};renderModal();return}if(card.type==='monopoly'){modal={type:'mono',id};renderModal();return}await tx(s=>{const p=s.players[pi],c=p.devCards.find(x=>x.id===id);if(s.currentPlayer!==pi||p.devPlayed||!c||c.boughtTurn>=s.turnCounter)return s;if(c.type==='knight'){p.devCards=p.devCards.filter(x=>x.id!==id);p.devPlayed=true;p.knightsPlayed++;s.robberResume=s.turnPhase;s.turnPhase='moveRobberDev';s.log.push(`💣 ${p.name} הפעיל קלף מחבל.`)}else if(c.type==='roadBuilding'){p.devCards=p.devCards.filter(x=>x.id!==id);p.devPlayed=true;s.freeRoads=2;uiMode='road';s.log.push(`🛣️ ${p.name} הפעיל פריצת דרך.`)}return recalc(s)})}
 async function year(id,a,b){const pi=myIndex();await tx(s=>{const p=s.players[pi],c=p.devCards.find(x=>x.id===id);if(s.currentPlayer!==pi||p.devPlayed||!c||c.boughtTurn>=s.turnCounter)return s;const need=blank();need[a]++;need[b]++;if(RK.some(k=>s.bank[k]<need[k]))return s;RK.forEach(k=>{if(need[k])takeBank(s,pi,k,need[k])});p.devCards=p.devCards.filter(x=>x.id!==id);p.devPlayed=true;return recalc(s)});closeModal()}
 async function monopoly(id,k){const pi=myIndex();await tx(s=>{const p=s.players[pi],c=p.devCards.find(x=>x.id===id);if(s.currentPlayer!==pi||p.devPlayed||!c||c.boughtTurn>=s.turnCounter)return s;let n=0;s.players.forEach((x,i)=>{if(i!==pi){n+=x.resources[k];x.resources[k]=0}});p.resources[k]+=n;p.devCards=p.devCards.filter(x=>x.id!==id);p.devPlayed=true;s.log.push(`📣 ${p.name} הפעיל שיווק מרוכז וקיבל ${n} ${R[k].name}.`);return recalc(s)});closeModal()}
-async function bankTrade(g,t){const pi=myIndex();await tx(s=>{if(s.currentPlayer!==pi||s.turnPhase!=='postroll'||g===t)return s;const rate=portRates(s,pi)[g];if(s.players[pi].resources[g]<rate||s.bank[t]<1)return s;s.players[pi].resources[g]-=rate;s.bank[g]+=rate;s.bank[t]--;s.players[pi].resources[t]++;return s});closeModal()}
-async function makeTrade(g,w){const pi=myIndex();await tx(s=>{if(s.currentPlayer!==pi||s.turnPhase!=='postroll')return s;const gs=RK.reduce((a,k)=>a+g[k],0),ws=RK.reduce((a,k)=>a+w[k],0);if(!gs||!ws)return s;for(const k of RK)if(g[k]>s.players[pi].resources[k])return s;s.tradeOffer={from:pi,give:g,want:w,rejectedBy:[]};return s});closeModal()}
+async function bankTrade(g,t){
+ const pi=myIndex();
+ let result='unknown',rate=4;
+ await tx(s=>{
+   if(s.currentPlayer!==pi||s.turnPhase!=='postroll'){result='turn';return s}
+   if(g===t){result='same';return s}
+   rate=portRates(s,pi)[g];
+   if(Number(s.players[pi].resources[g]||0)<rate){result='resources';return s}
+   if(Number(s.bank[t]||0)<1){result='bank';return s}
+   s.players[pi].resources[g]-=rate;
+   s.bank[g]+=rate;
+   s.bank[t]--;
+   s.players[pi].resources[t]++;
+   s.log=s.log||[];
+   s.log.push(`⚓ ${s.players[pi].name} ביצע מסחר עם הבנק.`);
+   result='ok';
+   return s
+ });
+ if(result==='ok')closeModal();
+ else if(result==='resources')alert(`אין לך מספיק ${R[g].name}. צריך ${rate} קלפים למסחר הזה.`);
+ else if(result==='bank')alert(`אין כרגע ${R[t].name} בבנק.`);
+ else if(result==='same')alert('בחר משאב שונה לקבלה.');
+ else if(result==='turn')alert('אפשר לסחור עם הבנק רק בתורך, אחרי הטלת הקוביות.');
+}
+async function makeTrade(g,w){
+ const pi=myIndex();
+ let result='unknown';
+ await tx(s=>{
+   if(s.currentPlayer!==pi||s.turnPhase!=='postroll'){result='turn';return s}
+   const gs=RK.reduce((a,k)=>a+Number(g[k]||0),0);
+   const ws=RK.reduce((a,k)=>a+Number(w[k]||0),0);
+   if(!gs||!ws){result='empty';return s}
+   for(const k of RK){
+     if(Number(g[k]||0)>Number(s.players[pi].resources[k]||0)){result='resources';return s}
+   }
+   s.tradeOffer={from:pi,give:g,want:w,rejectedBy:[]};
+   s.log=s.log||[];
+   s.log.push(`🤝 ${s.players[pi].name} הציע עסקה.`);
+   result='ok';
+   return s
+ });
+ if(result==='ok')closeModal();
+ else if(result==='turn')alert('אפשר להציע עסקה רק בתורך, אחרי הטלת הקוביות.');
+ else if(result==='empty')alert('צריך לבחור לפחות משאב אחד שאתה נותן ומשאב אחד שאתה מבקש.');
+ else if(result==='resources')alert('ניסית להציע יותר משאבים ממה שיש לך.');
+}
 async function acceptTrade(){const pi=myIndex();await tx(s=>{const o=s.tradeOffer;if(!o||o.from===pi)return s;for(const k of RK)if(s.players[o.from].resources[k]<o.give[k]||s.players[pi].resources[k]<o.want[k])return s;for(const k of RK){s.players[o.from].resources[k]-=o.give[k];s.players[pi].resources[k]+=o.give[k];s.players[pi].resources[k]-=o.want[k];s.players[o.from].resources[k]+=o.want[k]}s.tradeOffer=null;return s})}
 
 async function rejectTrade(){
@@ -512,6 +556,75 @@ function renderBoard(){if(!state?.board)return'';const pi=myIndex(),setupS=state
 function hint(){const pi=myIndex();if(state.phase==='setup')return state.currentPlayer!==pi?`שלב ההקמה - ממתין ל-${state.players[state.currentPlayer].name}`:state.setupMode==='settlement'?'בחר צומת להקמת חממה':'בחר דרך צמודה לחממה';if(state.phase==='finished')return`🏆 ${state.players[state.winner].name} ניצח`;if(state.turnPhase==='discard')return state.pendingDiscards?.[pi]?`עליך להשליך ${state.pendingDiscards[pi]} משאבים`:'ממתינים להשלכת משאבים';if(['moveRobber','moveRobberDev'].includes(state.turnPhase)&&state.currentPlayer===pi)return'בחר משושה חדש למחבל';if(state.turnPhase==='chooseVictim'&&state.currentPlayer===pi)return'בחר שחקן לגניבה';if(uiMode==='road')return state.freeRoads?`בחר דרך - נשארו ${state.freeRoads} חינם`:'בחר דרך לבנייה';if(uiMode==='settlement')return'בחר מקום לחממה';if(uiMode==='city')return'בחר חממה לשדרוג ליישוב';return''}
 function home(){return`<div class="page"><div class="card"><div style="font-size:46px">🌱</div><div class="title">המתיישבים - גרסת הגוש</div><div class="sub">משחק מלא מרובה משתתפים</div>${ferr?`<div class="err">${ferr}</div>`:`<div class="notice">${ready?'✅ מחובר ל-Firebase':'⏳ מתחבר'}</div>`}${err?`<div class="err">${err}</div>`:''}<input id="name" class="field" placeholder="השם שלך" value="${myName}"><div style="height:10px"></div><button id="create" class="btn primary" style="width:100%">צור משחק חדש</button><div style="height:10px"></div><div class="row"><input id="room" class="field" maxlength="4" placeholder="קוד" value="${code}" style="text-align:center;letter-spacing:4px;font-weight:900"><button id="join" class="btn green" style="flex:0 0 105px">הצטרף</button></div></div></div>`}
 function lobby(){const p=ps(),sp=spectators(),host=state.host===myId;return`<div class="page"><div class="card"><div class="notice">✅ החדר מסונכרן בזמן אמת</div><div class="title" style="font-size:26px">ממתינים לשחקנים</div><div style="background:#fff;border:2px dashed #d6c6a9;border-radius:14px;padding:14px;text-align:center;margin:14px 0"><div class="muted">קוד החדר</div><div style="font-size:38px;letter-spacing:7px;font-weight:900;color:#2563eb">${code}</div><button id="copy" class="btn orange" style="margin-top:8px">העתק קישור</button></div><div class="plist">${p.map((x,i)=>`<div class="pitem" style="background:#f6f1e8"><div class="dot" style="background:${PC[i]}"></div><div>${x.name}${x.left?' <span class="badge">יצא</span>':''}</div><div>${x.id===state.host?'<span class="badge" style="color:#555">מארח</span>':''}${x.id===myId?'<span class="badge" style="color:#2457ad">אתה</span>':''}</div></div>`).join('')}</div>${sp.length?`<div class="spectator-block"><div class="muted">👀 צופים (${sp.length})</div>${sp.map(x=>`<div class="spectator-row">${x.name}${x.id===myId?' <b>(אתה)</b>':''}</div>`).join('')}</div>`:''}<div style="height:12px"></div>${host&&p.filter(x=>!x.left).length>=2?'<button id="start" class="btn primary" style="width:100%">התחל משחק</button>':`<div class="muted">${host?'צריך לפחות 2 שחקנים':'ממתין למארח'}</div>`}<button id="leave" class="btn ghost" style="margin-top:10px">חזרה</button></div></div>`}
+
+function closeModal(){modal=null;const root=document.getElementById('modalRoot');if(root)root.innerHTML=''}
+function opts(){return RK.map(k=>`<option value="${k}">${R[k].icon} ${R[k].name}</option>`).join('')}
+function inputs(prefix,max={}){
+ return `<div class="resinputs">${RK.map(k=>`<label><span>${R[k].icon} ${R[k].name}</span><input id="${prefix}_${k}" type="number" min="0" max="${max[k]??99}" value="0"></label>`).join('')}</div>`
+}
+function renderModal(){
+ const root=document.getElementById('modalRoot');
+ if(!root||!modal)return;
+ const pi=myIndex();
+ const me=pi>=0?state.players[pi]:null;
+ let b='';
+
+ if(modal.type==='discard'){
+   b=`<h3>יצא 7 - השלכת משאבים</h3>
+   <div style="margin-bottom:8px">יש לך יותר מ-7 קלפי משאב. עליך לבחור בעצמך אילו קלפים להשליך.</div>
+   <div>יש להשליך בדיוק <b>${modal.need}</b> קלפים.</div>
+   ${inputs('d',me?.resources||{})}
+   <div class="modalactions"><button class="btn red" id="dok">השלך את הקלפים שבחרתי</button></div>`
+ }
+
+ if(modal.type==='bank'){
+   b=`<h3>מסחר עם הבנק</h3>
+   <div class="mrow"><label>נותן</label><select id="bg">${opts()}</select></div>
+   <div class="mrow"><label>מקבל</label><select id="bt">${opts()}</select></div>
+   <div class="tiny" style="margin-top:8px">המשחק ישתמש אוטומטית בשער המסחר הטוב ביותר שלך.</div>
+   <div class="modalactions"><button class="btn green" id="bok">בצע עסקה</button><button class="btn ghost" id="close">סגור</button></div>`
+ }
+
+ if(modal.type==='trade'){
+   b=`<h3>הצע עסקה לשחקנים</h3>
+   <b>אני נותן</b>
+   ${inputs('g',me?.resources||{})}
+   <b>אני מבקש</b>
+   ${inputs('w')}
+   <div class="modalactions"><button class="btn green" id="tok">פרסם עסקה</button><button class="btn ghost" id="close">סגור</button></div>`
+ }
+
+ if(modal.type==='year'){
+   b=`<h3>יבול מבורך</h3>
+   <div class="mrow"><label>משאב 1</label><select id="y1">${opts()}</select></div>
+   <div class="mrow"><label>משאב 2</label><select id="y2">${opts()}</select></div>
+   <div class="modalactions"><button class="btn green" id="yok">קח</button><button class="btn ghost" id="close">סגור</button></div>`
+ }
+
+ if(modal.type==='mono'){
+   b=`<h3>שיווק מרוכז</h3>
+   <div class="mrow"><label>משאב</label><select id="mo">${opts()}</select></div>
+   <div class="modalactions"><button class="btn green" id="mok">הפעל</button><button class="btn ghost" id="close">סגור</button></div>`
+ }
+
+ root.innerHTML=`<div class="modalback"><div class="modal">${b}</div></div>`;
+ const q=id=>document.getElementById(id);
+
+ if(q('close'))q('close').onclick=closeModal;
+ if(q('dok'))q('dok').onclick=()=>{
+   const sel={};RK.forEach(k=>sel[k]=+q('d_'+k).value||0);
+   submitDiscard(sel).then(()=>{closeModal();render()})
+ };
+ if(q('bok'))q('bok').onclick=()=>bankTrade(q('bg').value,q('bt').value);
+ if(q('tok'))q('tok').onclick=()=>{
+   const g={},w={};
+   RK.forEach(k=>{g[k]=+q('g_'+k).value||0;w[k]=+q('w_'+k).value||0});
+   makeTrade(g,w)
+ };
+ if(q('yok'))q('yok').onclick=()=>year(modal.id,q('y1').value,q('y2').value);
+ if(q('mok'))q('mok').onclick=()=>monopoly(modal.id,q('mo').value)
+}
+
 function escChat(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function chatMessages(s=state){return Array.isArray(s?.chat)?s.chat:Object.values(s?.chat||{})}
 async function sendChat(){
@@ -557,7 +670,21 @@ ${(me.devCards||[]).map(c=>VP.has(c.type)
 ?'<div class="muted" style="text-align:center">❌ סירבת לעסקה הזו</div>'
 :'<div class="row"><button id="accepttrade" class="btn green">קבל</button><button id="rejecttrade" class="btn red">סרב</button></div>'}</div></div>`:''}${state.turnPhase==='chooseVictim'&&mine?`<div class="sec"><div class="sect">בחר שחקן לגניבה</div>${state.robberVictims.map(v=>`<button class="actionbtn full" onclick="window.victimClick(${v})">${state.players[v].name}</button>`).join('')}</div>`:''}<div class="sec chatsec"><div class="sect">💬 צ'אט משחק</div><div id="chatList" class="chatlist">${chatHtml()}</div><div class="chatcomposer"><input id="chatInput" maxlength="300" placeholder="כתוב הודעה..." autocomplete="off"><button id="chatSend" class="btn primary">שלח</button></div></div><div class="sec"><div class="sect">🏘️ יישובי הגוש שהוקמו</div><div class="village-list">${Object.values(state.buildings||{}).filter(b=>b.level==='city'&&b.name).map(b=>`<div class="village-row"><span class="dot" style="background:${state.players[b.owner]?.color||'#fff'}"></span><b>${b.name}</b><span class="tiny">${state.players[b.owner]?.name||''}</span></div>`).join('')||'<div class="tiny">עדיין לא הוקמו יישובים.</div>'}</div></div><div class="sec"><div class="sect">בונוסים</div><div class="linecard">🛡️ מערך השמירה הגדול ביותר - 2 נקודות, החל מ-3 קלפי מחבל.</div><div class="linecard">🛣️ דרך ההתיישבות הארוכה ביותר - 2 נקודות, החל מאורך 5.</div></div><div class="sec"><div class="sect">יומן</div><div class="log">${(state.log||[]).slice(-16).reverse().map(x=>`<div class="logline">${x}</div>`).join('')}</div></div><div class="sec">${state.host===myId&&state.phase==='playing'?'<button id="rescueturn" class="btn rescue-btn" style="width:100%;margin-bottom:7px">🛠️ שחרר תור תקוע</button>':''}<button id="copy2" class="btn green" style="width:100%">העתק קישור לחדר</button><button id="leave2" class="btn ghost" style="width:100%;margin-top:7px">יציאה</button></div></div></div></div>`}
 function render(){document.getElementById('app').innerHTML=screen==='home'?home():screen==='lobby'?lobby():game();bind();const pi=myIndex();if(state?.turnPhase==='discard'&&state.pendingDiscards?.[pi]&&!modal){modal={type:'discard',need:state.pendingDiscards[pi]};renderModal()}}
-function bind(){const q=id=>document.getElementById(id);if(screen==='home'){q('create').onclick=createGame;q('join').onclick=()=>joinGame(q('room').value)}else if(screen==='lobby'){q('copy').onclick=copyLink;q('leave').onclick=leave;if(q('start'))q('start').onclick=startGame}else{if(q('roll'))q('roll').onclick=rollDice;if(q('end'))q('end').onclick=endTurn;if(q('road'))q('road').onclick=()=>{uiMode=uiMode==='road'?null:'road';render()};if(q('settle'))q('settle').onclick=()=>{uiMode=uiMode==='settlement'?null:'settlement';render()};if(q('city'))q('city').onclick=()=>{uiMode=uiMode==='city'?null:'city';render()};if(q('buydev'))q('buydev').onclick=buyDev;if(q('skipfree'))q('skipfree').onclick=()=>tx(s=>{if(s.currentPlayer===myIndex()){delete s.freeRoads;uiMode=null}return s});if(q('banktrade'))q('banktrade').onclick=()=>{modal={type:'bank'};renderModal()};if(q('ptrade'))q('ptrade').onclick=()=>{modal={type:'trade'};renderModal()};if(q('accepttrade'))q('accepttrade').onclick=acceptTrade;if(q('rejecttrade'))q('rejecttrade').onclick=rejectTrade;if(q('canceltrade'))q('canceltrade').onclick=cancelTrade;if(q('chatSend'))q('chatSend').onclick=sendChat;if(q('chatInput'))q('chatInput').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}};if(q('rescueturn'))q('rescueturn').onclick=rescueStuckTurn;q('copy2').onclick=copyLink;q('leave2').onclick=leave;setTimeout(()=>{const c=q('chatList');if(c)c.scrollTop=c.scrollHeight},0)}}
+function bind(){const q=id=>document.getElementById(id);if(screen==='home'){q('create').onclick=createGame;q('join').onclick=()=>joinGame(q('room').value)}else if(screen==='lobby'){q('copy').onclick=copyLink;q('leave').onclick=leave;if(q('start'))q('start').onclick=startGame}else{if(q('roll'))q('roll').onclick=rollDice;if(q('end'))q('end').onclick=endTurn;if(q('road'))q('road').onclick=()=>{
+ const pi=myIndex();
+ if(uiMode==='road'){uiMode=null;render();return}
+ if(!state.freeRoads){
+   const p=state.players?.[pi];
+   if(!p||!has(p,COST.road)){
+     const flowers=Number(p?.resources?.wood||0);
+     const sand=Number(p?.resources?.brick||0);
+     alert(`אין מספיק משאבים לדרך.\nעלות: 🌸1 + 🏖️1\nאצלך: 🌸${flowers} + 🏖️${sand}`);
+     return
+   }
+ }
+ uiMode='road';
+ render()
+};if(q('settle'))q('settle').onclick=()=>{uiMode=uiMode==='settlement'?null:'settlement';render()};if(q('city'))q('city').onclick=()=>{uiMode=uiMode==='city'?null:'city';render()};if(q('buydev'))q('buydev').onclick=buyDev;if(q('skipfree'))q('skipfree').onclick=()=>tx(s=>{if(s.currentPlayer===myIndex()){delete s.freeRoads;uiMode=null}return s});if(q('banktrade'))q('banktrade').onclick=()=>{modal={type:'bank'};renderModal()};if(q('ptrade'))q('ptrade').onclick=()=>{modal={type:'trade'};renderModal()};if(q('accepttrade'))q('accepttrade').onclick=acceptTrade;if(q('rejecttrade'))q('rejecttrade').onclick=rejectTrade;if(q('canceltrade'))q('canceltrade').onclick=cancelTrade;if(q('chatSend'))q('chatSend').onclick=sendChat;if(q('chatInput'))q('chatInput').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}};if(q('rescueturn'))q('rescueturn').onclick=rescueStuckTurn;q('copy2').onclick=copyLink;q('leave2').onclick=leave;setTimeout(()=>{const c=q('chatList');if(c)c.scrollTop=c.scrollHeight},0)}}
 function copyLink(){const u=`${location.origin}${location.pathname}?room=${code}`;navigator.clipboard?.writeText(u).then(()=>alert('הקישור הועתק')).catch(()=>prompt('העתק:',u))}
 async function leave(){
  const leavingCode=code,leavingName=myName,leavingId=myId;
