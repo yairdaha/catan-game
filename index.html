@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>המתיישבים - גרסת הגוש</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1a2a3a; color: #eee; overflow-x: hidden; }
+    button:hover:not(:disabled) { transform: scale(1.03); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input { font-family: inherit; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 5px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+    import {
+      getDatabase, ref, get, set, update, onValue, runTransaction, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+
+    // ============================================================
+    // 1) הדבק כאן את firebaseConfig שקיבלת מ-Firebase Console
+    // Project settings > Your apps > Web app > SDK setup and configuration
+    // ============================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyA9dxSGE_bsJn7YEOf4wYu8vpNXfFDgsTc",
+      authDomain: "catan-44838.firebaseapp.com",
+      databaseURL: "https://catan-44838-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "catan-44838",
+      storageBucket: "catan-44838.firebasestorage.app",
+      messagingSenderId: "296003162886",
+      appId: "1:296003162886:web:7b83fd4563a0453edd8487",
+      measurementId: "G-8CCGZKJ9JW"
+    };
+
+    const CONFIGURED = true;
+
+    let appFb = null;
+    let db = null;
+    let firebaseReady = false;
+    let firebaseError = "";
+    let unsubscribeGame = null;
+
+    let myId = localStorage.getItem('myId') || crypto.randomUUID();
+    localStorage.setItem('myId', myId);
+
+    let myName = localStorage.getItem('myName') || '';
+    let gameState = null;
+    let currentScreen = 'home';
+    let gameCode = new URLSearchParams(location.search).get('room')?.toUpperCase() || '';
+    let error = '';
+
+    const RE = { wood: '🌸', brick: '🏖️', wheat: '🍅', sheep: '🥬', ore: '🌱' };
+    const RN = { wood: 'פרחים', brick: 'חול', wheat: 'עגבניות', sheep: 'חסות', ore: 'זרעים' };
+    const PC = ['#2563eb', '#dc2626', '#059669', '#d97706'];
+
+    function cleanCode(code) {
+      return (code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    }
+
+    function newRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let out = '';
+      for (let i = 0; i < 4; i++) out += chars[Math.floor(Math.random() * chars.length)];
+      return out;
+    }
+
+    function roomRef(code) {
+      return ref(db, `games/${cleanCode(code)}`);
+    }
+
+    async function initFirebase() {
+      try {
+        appFb = initializeApp(firebaseConfig);
+        db = getDatabase(appFb);
+        firebaseReady = true;
+        render();
+      } catch (e) {
+        console.error(e);
+        firebaseError = `Firebase לא התחבר: ${e.message}`;
+        render();
+      }
+    }
+
+    function subscribeToGame(code) {
+      if (unsubscribeGame) unsubscribeGame();
+
+      unsubscribeGame = onValue(roomRef(code), snapshot => {
+        const state = snapshot.val();
+
+        if (!state) {
+          if (currentScreen !== 'home') {
+            error = 'החדר כבר לא קיים';
+            currentScreen = 'home';
+          }
+          gameState = null;
+          render();
+          return;
+        }
+
+        gameState = state;
+
+        if (state.phase === 'playing') {
+          currentScreen = 'game';
+        } else {
+          currentScreen = 'lobby';
+        }
+
+        render();
+      }, err => {
+        console.error(err);
+        error = `שגיאת Firebase: ${err.message}`;
+        render();
+      });
+    }
+
+    async function createGame() {
+      if (!firebaseReady) {
+        error = firebaseError || 'Firebase עדיין לא מחובר';
+        render();
+        return;
+      }
+
+      myName = document.getElementById('nameInput')?.value?.trim() || myName.trim();
+      if (!myName) {
+        error = 'הכנס שם';
+        render();
+        return;
+      }
+      localStorage.setItem('myName', myName);
+
+      let code;
+      let exists = true;
+      for (let i = 0; i < 8 && exists; i++) {
+        code = newRoomCode();
+        exists = (await get(roomRef(code))).exists();
+      }
+
+      if (exists) {
+        error = 'לא הצלחתי ליצור קוד חדר. נסה שוב.';
+        render();
+        return;
+      }
+
+      gameCode = code;
+      gameState = {
+        code: gameCode,
+        phase: 'lobby',
+        players: [{ id: myId, name: myName }],
+        host: myId,
+        createdAt: Date.now(),
+        lastUpdate: Date.now()
+      };
+
+      try {
+        await set(roomRef(gameCode), gameState);
+        history.replaceState({}, '', `${location.pathname}?room=${gameCode}`);
+        currentScreen = 'lobby';
+        error = '';
+        subscribeToGame(gameCode);
+      } catch (e) {
+        console.error(e);
+        error = `לא ניתן ליצור משחק: ${e.message}`;
+        render();
+      }
+    }
+
+    async function joinGame(code) {
+      if (!firebaseReady) {
+        error = firebaseError || 'Firebase עדיין לא מחובר';
+        render();
+        return;
+      }
+
+      myName = document.getElementById('nameInput')?.value?.trim() || myName.trim();
+      code = cleanCode(code);
+
+      if (!myName) {
+        error = 'הכנס שם';
+        render();
+        return;
+      }
+      if (code.length !== 4) {
+        error = 'קוד לא תקין';
+        render();
+        return;
+      }
+
+      localStorage.setItem('myName', myName);
+
+      try {
+        const result = await runTransaction(roomRef(code), current => {
+          if (current === null) return current;
+          if (current.phase !== 'lobby') return current;
+
+          const players = Array.isArray(current.players)
+            ? current.players
+            : Object.values(current.players || {});
+
+          const existingIndex = players.findIndex(p => p.id === myId);
+
+          if (existingIndex === -1) {
+            if (players.length >= 4) return current;
+            players.push({ id: myId, name: myName });
+          } else {
+            players[existingIndex].name = myName;
+          }
+
+          current.players = players;
+          current.lastUpdate = Date.now();
+          return current;
+        }, { applyLocally: false });
+
+        const state = result.snapshot.val();
+
+        if (!state) {
+          error = `משחק לא נמצא (קוד: ${code})`;
+          render();
+          return;
+        }
+        if (state.phase !== 'lobby' && !state.players?.some?.(p => p.id === myId)) {
+          error = 'המשחק כבר התחיל';
+          render();
+          return;
+        }
+        const players = Array.isArray(state.players) ? state.players : Object.values(state.players || {});
+        if (!players.some(p => p.id === myId)) {
+          error = players.length >= 4 ? 'המשחק מלא' : 'לא ניתן להצטרף למשחק';
+          render();
+          return;
+        }
+
+        gameCode = code;
+        gameState = state;
+        currentScreen = state.phase === 'playing' ? 'game' : 'lobby';
+        error = '';
+        history.replaceState({}, '', `${location.pathname}?room=${gameCode}`);
+        subscribeToGame(gameCode);
+      } catch (e) {
+        console.error(e);
+        error = `שגיאה בהצטרפות: ${e.message}`;
+        render();
+      }
+    }
+
+    async function startGame() {
+      if (!firebaseReady || !gameCode || !gameState) return;
+      if (gameState.host !== myId) return;
+
+      const players = Array.isArray(gameState.players)
+        ? gameState.players
+        : Object.values(gameState.players || {});
+
+      if (players.length < 2) {
+        error = 'צריך לפחות 2 שחקנים';
+        render();
+        return;
+      }
+
+      const nextState = {
+        ...gameState,
+        phase: 'playing',
+        players: players.map((p, i) => ({
+          ...p,
+          color: PC[i % PC.length],
+          resources: { wood: 0, brick: 0, wheat: 0, sheep: 0, ore: 0 },
+          vp: 0
+        })),
+        currentPlayer: 0,
+        turnPhase: 'preroll',
+        dice: null,
+        log: ['🎲 המשחק התחיל!'],
+        lastUpdate: Date.now()
+      };
+
+      await set(roomRef(gameCode), nextState);
+    }
+
+    async function rollDice() {
+      if (!firebaseReady || !gameState) return;
+
+      const players = Array.isArray(gameState.players)
+        ? gameState.players
+        : Object.values(gameState.players || {});
+
+      const myIndex = players.findIndex(p => p.id === myId);
+      if (gameState.currentPlayer !== myIndex || gameState.turnPhase !== 'preroll') return;
+
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      const log = [...(gameState.log || []), `🎲 ${players[myIndex].name} הטיל ${d1}+${d2}=${d1 + d2}`];
+
+      await update(roomRef(gameCode), {
+        dice: [d1, d2],
+        turnPhase: 'postroll',
+        log,
+        lastUpdate: Date.now()
+      });
+    }
+
+    async function endTurn() {
+      if (!firebaseReady || !gameState) return;
+
+      const players = Array.isArray(gameState.players)
+        ? gameState.players
+        : Object.values(gameState.players || {});
+
+      const myIndex = players.findIndex(p => p.id === myId);
+      if (gameState.currentPlayer !== myIndex || gameState.turnPhase !== 'postroll') return;
+
+      const nextP = (gameState.currentPlayer + 1) % players.length;
+      const log = [...(gameState.log || []), `➡️ תור של ${players[nextP].name}`];
+
+      await update(roomRef(gameCode), {
+        currentPlayer: nextP,
+        turnPhase: 'preroll',
+        dice: null,
+        log,
+        lastUpdate: Date.now()
+      });
+    }
+
+    async function copyGameLink() {
+      const url = `${location.origin}${location.pathname}?room=${gameCode}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('הקישור הועתק! שלח אותו לחברים.');
+      } catch {
+        prompt('העתק את הקישור:', url);
+      }
+    }
+
+    function leaveRoom() {
+      if (unsubscribeGame) {
+        unsubscribeGame();
+        unsubscribeGame = null;
+      }
+      gameCode = '';
+      gameState = null;
+      currentScreen = 'home';
+      history.replaceState({}, '', location.pathname);
+      render();
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+
+      const firebaseNotice = !CONFIGURED
+        ? `<div style="background:#fff3cd;color:#664d03;padding:10px;border-radius:8px;margin-bottom:12px;font-size:13px;text-align:right;">
+             ⚠️ Firebase עדיין לא מוגדר.
+           </div>`
+        : firebaseError
+          ? `<div style="background:#fee;color:#c00;padding:10px;border-radius:8px;margin-bottom:12px;font-size:13px;">${firebaseError}</div>`
+          : `<div style="font-size:11px;color:${firebaseReady ? '#198754' : '#888'};margin-bottom:10px;">
+               <span class="status-dot" style="background:${firebaseReady ? '#198754' : '#aaa'}"></span>
+               ${firebaseReady ? 'מחובר ל-Firebase' : 'מתחבר ל-Firebase...'}
+             </div>`;
+
+      if (currentScreen === 'home') {
+        app.innerHTML = `
+          <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
+            background:linear-gradient(135deg,#1e3a5f 0%,#2d5a87 50%,#1e3a5f 100%);padding:16px;">
+            <div style="background:#faf3e0;border-radius:16px;padding:32px;max-width:400px;width:100%;
+              box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center;">
+              <div style="font-size:48px;margin-bottom:8px;">🌱</div>
+              <h1 style="margin:0 0 4px;font-size:28px;color:#2c1810;font-weight:800;">המתיישבים - גרסת הגוש</h1>
+              <p style="margin:0 0 16px;color:#8b7355;font-size:14px;">משחק אסטרטגיה מרובה משתתפים</p>
+              ${firebaseNotice}
+              ${error ? `<div style="background:#fee;color:#c00;padding:8px;border-radius:8px;margin-bottom:12px;font-size:13px;">${error}</div>` : ''}
+              <input id="nameInput" placeholder="השם שלך" value="${myName}"
+                style="width:100%;padding:10px 12px;border-radius:8px;border:2px solid #d4c5a9;
+                  font-size:16px;margin-bottom:12px;text-align:right;background:#fff;" />
+              <button id="createBtn"
+                style="width:100%;padding:12px;border-radius:8px;border:none;background:#2563eb;color:#fff;
+                  font-size:16px;font-weight:700;cursor:pointer;margin-bottom:12px;">
+                🎮 צור משחק חדש
+              </button>
+              <div style="display:flex;gap:8px;">
+                <input id="codeInput" placeholder="קוד משחק" maxlength="4" value="${gameCode || ''}"
+                  style="flex:1;padding:10px 12px;border-radius:8px;border:2px solid #d4c5a9;
+                    font-size:16px;text-align:center;letter-spacing:4px;font-weight:700;background:#fff;" />
+                <button id="joinBtn"
+                  style="padding:10px 20px;border-radius:8px;border:none;background:#059669;color:#fff;
+                    font-size:16px;font-weight:700;cursor:pointer;">
+                  הצטרף
+                </button>
+              </div>
+            </div>
+          </div>`;
+
+        document.getElementById('createBtn').onclick = createGame;
+        document.getElementById('joinBtn').onclick = () => joinGame(document.getElementById('codeInput').value);
+        document.getElementById('codeInput').addEventListener('keydown', e => {
+          if (e.key === 'Enter') joinGame(e.target.value);
+        });
+      }
+
+      else if (currentScreen === 'lobby') {
+        const players = Array.isArray(gameState?.players)
+          ? gameState.players
+          : Object.values(gameState?.players || {});
+        const isHost = gameState?.host === myId;
+
+        app.innerHTML = `
+          <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;
+            background:linear-gradient(135deg,#1e3a5f 0%,#2d5a87 50%,#1e3a5f 100%);padding:16px;">
+            <div style="background:#faf3e0;border-radius:16px;padding:32px;max-width:420px;width:100%;
+              box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center;">
+              <div style="font-size:11px;color:#198754;margin-bottom:8px;">● מחובר בזמן אמת</div>
+              <h2 style="margin:0 0 8px;color:#2c1810;">ממתינים לשחקנים...</h2>
+              ${error ? `<div style="background:#fee;color:#c00;padding:8px;border-radius:8px;margin-bottom:12px;font-size:13px;">${error}</div>` : ''}
+              <div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:16px;border:2px dashed #d4c5a9;">
+                <div style="font-size:12px;color:#8b7355;margin-bottom:4px;">קוד המשחק</div>
+                <div style="font-size:36px;font-weight:900;letter-spacing:8px;color:#2563eb;">${gameCode}</div>
+                <button id="copyBtn"
+                  style="margin-top:8px;padding:7px 12px;border-radius:6px;border:none;background:#e67e22;color:#fff;font-size:12px;cursor:pointer;">
+                  🔗 העתק קישור
+                </button>
+              </div>
+
+              <div style="text-align:right;margin-bottom:16px;">
+                <div style="font-size:14px;font-weight:600;color:#2c1810;margin-bottom:8px;">שחקנים (${players.length}/4):</div>
+                ${players.map((p, i) => `
+                  <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;direction:rtl;color:#2c1810;">
+                    <div style="width:12px;height:12px;border-radius:6px;background:${PC[i % PC.length]};"></div>
+                    <span style="font-size:15px;">${p.name}</span>
+                    ${p.id === gameState.host ? '<span style="font-size:11px;color:#888;">(מארח)</span>' : ''}
+                    ${p.id === myId ? '<span style="font-size:11px;color:#2563eb;">(אתה)</span>' : ''}
+                  </div>
+                `).join('')}
+              </div>
+
+              ${isHost && players.length >= 2 ? `
+                <button id="startBtn" style="width:100%;padding:12px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">
+                  🚀 התחל משחק (${players.length} שחקנים)
+                </button>
+              ` : isHost ? `
+                <p style="color:#888;font-size:13px;">צריך לפחות 2 שחקנים כדי להתחיל</p>
+              ` : `
+                <p style="color:#888;font-size:13px;">ממתין שהמארח יתחיל...</p>
+              `}
+              <button id="leaveBtn" style="margin-top:14px;background:none;border:none;color:#8b7355;text-decoration:underline;cursor:pointer;">חזרה למסך הראשי</button>
+            </div>
+          </div>`;
+
+        document.getElementById('copyBtn').onclick = copyGameLink;
+        document.getElementById('leaveBtn').onclick = leaveRoom;
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) startBtn.onclick = startGame;
+      }
+
+      else if (currentScreen === 'game') {
+        const players = Array.isArray(gameState?.players)
+          ? gameState.players
+          : Object.values(gameState?.players || {});
+        const meIndex = players.findIndex(p => p.id === myId);
+        const me = players[meIndex];
+        const curPlayer = players[gameState?.currentPlayer];
+        const myTurn = meIndex >= 0 && gameState?.currentPlayer === meIndex;
+
+        app.innerHTML = `
+          <div style="min-height:100vh;background:#1a2a3a;display:flex;flex-direction:column;color:#eee;">
+            <div style="background:#0f1f2e;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a3a4a;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <span style="font-size:20px;">🌱</span>
+                <span style="font-weight:700;font-size:16px;">המתיישבים - גרסת הגוש</span>
+              </div>
+              <div style="font-size:13px;color:#88a0b8;">חדר ${gameCode} | תור: ${curPlayer?.name || ''}</div>
+            </div>
+
+            <div style="flex:1;display:flex;gap:8px;padding:8px;overflow:auto;flex-wrap:wrap;">
+              <div style="flex:1 1 460px;display:flex;align-items:center;justify-content:center;padding:8px;min-width:320px;">
+                <svg viewBox="0 0 460 420" style="width:100%;max-width:500px;height:auto;">
+                  <rect width="460" height="420" fill="#1a6fa0" rx="12"/>
+                  <text x="230" y="185" text-anchor="middle" dominant-baseline="middle" font-size="30" fill="#d8edf7">🌱</text>
+                  <text x="230" y="225" text-anchor="middle" dominant-baseline="middle" font-size="24" fill="#d8edf7">הלוח יתווסף בשלב הבא</text>
+                </svg>
+              </div>
+
+              <div style="flex:0 0 280px;display:flex;flex-direction:column;gap:8px;padding:8px 12px;min-width:260px;">
+                <div style="background:#0f1f2e;border-radius:10px;padding:12px;">
+                  <div style="font-size:14px;text-align:center;color:${curPlayer?.color || '#fff'};font-weight:700;">
+                    ${myTurn ? 'התור שלך!' : `תור של ${curPlayer?.name || ''}`}
+                  </div>
+
+                  ${gameState?.dice ? `
+                    <div style="font-size:28px;margin-top:8px;text-align:center;">
+                      ${gameState.dice[0]} + ${gameState.dice[1]} = ${gameState.dice[0] + gameState.dice[1]}
+                    </div>` : ''}
+
+                  ${myTurn && gameState?.turnPhase === 'preroll' ? `
+                    <button id="rollBtn" style="margin-top:8px;width:100%;padding:10px;border-radius:8px;border:none;background:#e74c3c;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">
+                      🎲 הטל קוביות
+                    </button>` : ''}
+
+                  ${myTurn && gameState?.turnPhase === 'postroll' ? `
+                    <button id="endBtn" style="margin-top:8px;width:100%;padding:10px;border-radius:8px;border:none;background:#e67e22;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">
+                      סיים תור
+                    </button>` : ''}
+                </div>
+
+                ${me ? `
+                  <div style="background:#0f1f2e;border-radius:10px;padding:12px;">
+                    <div style="font-size:12px;color:#88a0b8;margin-bottom:6px;">המשאבים שלי</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                      ${Object.entries(RE).map(([r, emoji]) => `
+                        <div title="${RN[r]}" style="display:flex;align-items:center;gap:4px;background:#1a2a3a;border-radius:6px;padding:4px 8px;font-size:14px;">
+                          <span>${emoji}</span><span style="font-weight:700;">${me.resources?.[r] || 0}</span>
+                        </div>`).join('')}
+                    </div>
+                  </div>` : ''}
+
+                <div style="background:#0f1f2e;border-radius:10px;padding:10px;flex:1 1 80px;overflow-y:auto;min-height:80px;">
+                  <div style="font-size:11px;color:#88a0b8;margin-bottom:4px;">יומן</div>
+                  <div style="font-size:11px;color:#9cb0bf;line-height:1.6;direction:rtl;">
+                    ${(gameState?.log || []).slice(-10).reverse().map(l => `<div>${l}</div>`).join('')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+
+        const rollBtn = document.getElementById('rollBtn');
+        if (rollBtn) rollBtn.onclick = rollDice;
+        const endBtn = document.getElementById('endBtn');
+        if (endBtn) endBtn.onclick = endTurn;
+      }
+    }
+
+    render();
+    await initFirebase();
+  </script>
+</body>
+</html>
