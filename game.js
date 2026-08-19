@@ -361,6 +361,7 @@ async function buyDev(){
      if(!s)return s;
      s.players=ps(s);
      normalizeSpectators(s);
+     repairBlockedState(s);
 
      const livePi=s.players.findIndex(p=>p.id===myId);
      if(livePi<0){
@@ -369,10 +370,14 @@ async function buyDev(){
      }
 
      const p=s.players[livePi];
+     p.resources=p.resources||blank();
+     p.devCards=Array.isArray(p.devCards)?p.devCards:Object.values(p.devCards||{});
+     s.devDeck=Array.isArray(s.devDeck)?s.devDeck:Object.values(s.devDeck||{});
+
      result.resources={
-       sheep:Number(p.resources?.sheep||0),
-       ore:Number(p.resources?.ore||0),
-       wheat:Number(p.resources?.wheat||0)
+       sheep:Number(p.resources.sheep||0),
+       ore:Number(p.resources.ore||0),
+       wheat:Number(p.resources.wheat||0)
      };
 
      if(s.currentPlayer!==livePi||s.turnPhase!=='postroll'){
@@ -385,24 +390,34 @@ async function buyDev(){
        return s
      }
 
-     if(!(s.devDeck||[]).length){
+     if(!s.devDeck.length){
        result={...result,ok:false,reason:'empty'};
        return s
      }
 
+     // Preserve all turn-flow fields exactly as they were.
+     const keepPhase=s.turnPhase;
+     const keepCurrent=s.currentPlayer;
+     const keepTurn=s.turnCounter;
+     const keepDice=s.dice??null;
+
      pay(s,livePi,COST.dev);
 
      const boughtType=s.devDeck.shift();
-     p.devCards=p.devCards||[];
      p.devCards.push({
        id:crypto.randomUUID(),
        type:boughtType,
-       boughtTurn:s.turnCounter
+       boughtTurn:Number(s.turnCounter||0)
      });
 
      s.log=s.log||[];
      s.log.push(`🎴 ${p.name} קנה קלף פיתוח.`);
-     recalc(s);
+
+     // Buying a development card must not alter the turn state.
+     s.turnPhase=keepPhase;
+     s.currentPlayer=keepCurrent;
+     s.turnCounter=keepTurn;
+     s.dice=keepDice;
 
      result={ok:true,reason:'ok',card:boughtType};
      return s
@@ -414,7 +429,9 @@ async function buyDev(){
  }
 
  if(result.ok){
-   alert(`קנית קלף פיתוח: ${DEV_NAMES[result.card]}\n\nאי אפשר להפעיל קלף פיתוח באותו תור שבו נקנה.`);
+   const cardName=DEV_NAMES?.[result.card]||'קלף פיתוח';
+   alert(`קנית קלף פיתוח: ${cardName}\n\nאפשר להמשיך את התור כרגיל.`);
+   verifyTurnAfterAction();
    return
  }
 
@@ -507,6 +524,28 @@ async function rejectTrade(){
  })
 }
 
+
+
+async function verifyTurnAfterAction(){
+ if(!code||!state)return;
+ try{
+   const snap=await get(roomRef(code));
+   const s=snap.val();
+   if(!s)return;
+   const players=ps(s);
+   const cur=players[s.currentPlayer];
+   if(s.phase==='playing' && (!cur || cur.left)){
+     await runTransaction(roomRef(code),x=>{
+       if(!x)return x;
+       x.players=ps(x);
+       normalizeSpectators(x);
+       return repairBlockedState(x)
+     },{applyLocally:false});
+   }
+ }catch(e){
+   console.warn('Turn verification failed',e)
+ }
+}
 
 async function rescueStuckTurn(){
  if(!state||state.host!==myId)return;
@@ -658,11 +697,11 @@ function chatHtml(){
 function game(){const pi=myIndex(),watching=pi<0||isSpectator(),me=pi>=0?state.players[pi]:{resources:blank(),devCards:[],vp:0,knightsPlayed:0},cur=state.players[state.currentPlayer],mine=!watching&&state.currentPlayer===pi,post=state.phase==='playing'&&mine&&state.turnPhase==='postroll',offer=state.tradeOffer;return`<div class="shell"><div class="topbar"><div class="brand"><div class="brandico">🌱</div>המתיישבים - גרסת הגוש</div><div class="meta"><span class="pill">חדר ${code}</span><span class="pill">תור: <b style="color:${cur?.color}">${cur?.name||'-'}</b></span>${watching?'<span class="pill spectator-pill">👀 מצב צופה</span>':`<span class="pill">נקודות: <b>${me?.vp||0}</b>/10</span>`}${state.dice?`<span class="pill dicepill">🎲 יצא <b>${state.dice[0]+state.dice[1]}</b> <span class="tiny">(${state.dice[0]}+${state.dice[1]})</span></span>`:''}</div></div><div class="layout"><div class="panel"><div class="sec"><div class="sect">התור</div><div class="turnbox"><div class="muted">${mine?'התור שלך':'השחקן הפעיל'}</div><div class="turnname" style="color:${cur?.color}">${mine?'אתה':cur?.name}</div>${state.dice?`<div class="dicebig"><div class="dicetotal">${state.dice[0]+state.dice[1]}</div><div class="diceparts">🎲 ${state.dice[0]} + ${state.dice[1]}</div></div>`:''}${mine&&state.turnPhase==='preroll'?'<button id="roll" class="big red">🎲 הטל קוביות</button>':''}${mine&&state.turnPhase==='postroll'?'<button id="end" class="big orange">סיים תור</button>':''}${state.phase==='finished'?`<div style="font-size:20px;font-weight:900">🏆 ${state.players[state.winner].name} ניצח!</div>`:''}</div></div><div class="sec"><div class="sect">${watching?'👀 מצב צופה':'המשאבים שלי'}</div>${watching?'<div class="notice spectator-notice">אתה צופה במשחק. הפעולות חסומות.</div>':''}<div class="resgrid">${RK.map(k=>`<div class="res"><span>${R[k].icon} ${R[k].name}</span><span class="resn">${me?.resources?.[k]||0}</span></div>`).join('')}</div>${watching?'':`<div class="tiny" style="margin-top:8px">שערי מסחר: ${ratesText(state,pi)}</div>`}</div><div class="sec"><div class="sect">פעולות</div><div class="actiongrid"><button class="actionbtn ${uiMode==='road'?'active':''}" id="road" ${!post&&!state.freeRoads?'disabled':''}>🛣️ דרך<br><span class="tiny">🌸1 + 🏖️1</span></button><button class="actionbtn ${uiMode==='settlement'?'active':''}" id="settle" ${!post?'disabled':''}>🏡 חממה<br><span class="tiny">🌸1 🏖️1 🥬1 🍅1</span></button><button class="actionbtn ${uiMode==='city'?'active':''}" id="city" ${!post?'disabled':''}>🏘️ יישוב<br><span class="tiny">🌱3 + 🍅2</span></button><button class="actionbtn devbuybtn" id="buydev" ${!post?'disabled':''}>🎴 קנה קלף פיתוח<br><span class="tiny">עלות: 🥬1 + 🌱1 + 🍅1 · בחפיסה: ${state.devDeck?.length ?? 0}</span></button><button class="actionbtn" id="banktrade" ${!post?'disabled':''}>⚓ מסחר עם הבנק</button><button class="actionbtn" id="ptrade" ${!post||offer?'disabled':''}>🤝 הצע עסקה</button>${state.freeRoads?'<button class="actionbtn full" id="skipfree">סיים פריצת דרך</button>':''}</div></div><div class="sec"><div class="sect">קלפי הפיתוח שלי</div>
 <div class="muted">${devSummary(me)}</div>
 <div style="height:7px"></div>
-${(me.devCards||[]).map(c=>VP.has(c.type)
-  ? `<div class="devcardrow"><span>🏆 ${DEV_NAMES[c.type]}</span><span class="badge">נקודת ניצחון</span></div>`
+${(Array.isArray(me.devCards)?me.devCards:Object.values(me.devCards||{})).map(c=>VP.has(c.type)
+  ? `<div class="devcardrow"><span>🏆 ${DEV_NAMES[c.type]||c.type||'קלף פיתוח'}</span><span class="badge">נקודת ניצחון</span></div>`
   : c.boughtTurn>=state.turnCounter
-    ? `<div class="devcardrow"><span>🎴 ${DEV_NAMES[c.type]}</span><span class="badge">חדש - מהתור הזה</span></div>`
-    : `<button class="actionbtn full" onclick="window.playDevClick('${c.id}')" ${(!mine||me.devPlayed||state.phase!=='playing')?'disabled':''}>הפעל: ${DEV_NAMES[c.type]}</button>`
+    ? `<div class="devcardrow"><span>🎴 ${DEV_NAMES[c.type]||c.type||'קלף פיתוח'}</span><span class="badge">חדש - מהתור הזה</span></div>`
+    : `<button class="actionbtn full" onclick="window.playDevClick('${c.id}')" ${(!mine||me.devPlayed||state.phase!=='playing')?'disabled':''}>הפעל: ${DEV_NAMES[c.type]||c.type||'קלף פיתוח'}</button>`
 ).join('')||'<div class="tiny">אין לך עדיין קלפי פיתוח.</div>'}
 </div><div class="sec"><div class="sect">שחקנים</div><div class="plist">${state.players.map((p,i)=>`<div class="pitem"><div class="dot" style="background:${p.color}"></div><div><b style="${p.left?'opacity:.55;text-decoration:line-through':''}">${p.name}</b>${p.left?'<span class="left-badge">יצא</span>':''}<div class="tiny">${p.vp||0} נק' · 🃏 ${total(p)} קלפים · מחבלים: ${p.knightsPlayed||0} · דרך: ${state.longestRoadLengths?.[i]||0}</div></div><div class="player-public-info"><span class="cardcount">${total(p)} 🃏</span><span>${i===state.longestRoadHolder?'🛣️':''}${i===state.largestArmyHolder?'🛡️':''}</span></div></div>`).join('')}</div>${spectators().length?`<div class="sec"><div class="sect">👀 צופים</div><div class="spectator-game-list">${spectators().map(x=>`<span class="spectator-chip">${x.name}${x.id===myId?' (אתה)':''}</span>`).join('')}</div></div>`:''}</div></div><div class="center"><div class="boardhead"><div><b>הלוח</b><div class="tiny">חממה = יישוב, יישוב = עיר, דרך בין מושבים = כביש</div></div><div class="legend">${RK.map(k=>`<span class="leg">${R[k].icon} ${R[k].name}</span>`).join('')}</div></div><div class="boardwrap">${renderBoard()}</div><div class="hint">${hint()}</div></div><div class="panel right">${offer?`<div class="sec"><div class="sect">עסקה פתוחה</div><div class="offer"><b>${state.players[offer.from].name}</b> נותן ${fmt(offer.give)}<br>ומבקש ${fmt(offer.want)}<div style="height:8px"></div>${watching?'<div class="tiny">👀 צופה אינו יכול להשתתף בעסקה.</div>':offer.from===pi
 ?'<button id="canceltrade" class="btn red" style="width:100%">בטל עסקה</button>'
