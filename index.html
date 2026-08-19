@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>המתיישבים - גרסת הגוש</title>
+  <style>
+    :root{
+      --bg:#10243a;
+      --bg2:#0d1d30;
+      --panel:#0f2741;
+      --panel2:#123255;
+      --line:#26486b;
+      --text:#ecf4ff;
+      --muted:#9eb4c9;
+      --gold:#ffd166;
+      --danger:#e45454;
+      --ok:#2ca76b;
+      --sand:#d8c092;
+      --sea:#2777a8;
+      --shadow:0 14px 34px rgba(0,0,0,.22);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:system-ui,-apple-system,sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(90,130,180,.18), transparent 30%),
+        linear-gradient(180deg, #123052 0%, #0f2237 100%);
+      color:var(--text);
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+    button,input,select{font-family:inherit}
+    button{transition:.15s transform ease,.15s opacity ease,.15s background ease}
+    button:hover:not(:disabled){transform:translateY(-1px)}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .page-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:18px}
+    .card{
+      width:min(100%,420px);
+      background:rgba(250,243,224,.98);
+      color:#2b2318;
+      border-radius:20px;
+      padding:30px;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(255,255,255,.45);
+    }
+    .home-title{font-size:31px;font-weight:800;margin-bottom:4px}
+    .subtitle{font-size:14px;color:#826e4e;margin-bottom:16px}
+    .status{
+      font-size:12px;margin-bottom:12px;padding:10px 12px;border-radius:10px;
+      background:#f3f7fb;border:1px solid #d8e2ef;color:#37506d
+    }
+    .err{
+      background:#ffe9e9;color:#b11d1d;border:1px solid #f2bbbb;
+      border-radius:10px;padding:9px 11px;font-size:13px;margin-bottom:12px
+    }
+    .field{
+      width:100%;padding:12px 14px;border-radius:10px;border:2px solid #d9ccb3;
+      font-size:16px;background:#fff;outline:none
+    }
+    .field:focus{border-color:#2563eb}
+    .btn{
+      border:none;border-radius:10px;padding:12px 16px;font-size:16px;font-weight:800;cursor:pointer
+    }
+    .btn-primary{background:#2563eb;color:#fff}
+    .btn-green{background:#119669;color:#fff}
+    .btn-orange{background:#dd7b1b;color:#fff}
+    .btn-red{background:#e35146;color:#fff}
+    .btn-ghost{background:transparent;color:#7c6544;text-decoration:underline}
+    .row{display:flex;gap:10px}
+    .row > *{flex:1}
+
+    .game-shell{
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
+    }
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;gap:14px;
+      padding:12px 16px;background:rgba(8,21,35,.72);backdrop-filter:blur(8px);
+      border-bottom:1px solid rgba(255,255,255,.07);position:sticky;top:0;z-index:30
+    }
+    .brand{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:800}
+    .brand-badge{
+      width:34px;height:34px;border-radius:10px;background:linear-gradient(180deg,#204d76,#123355);
+      display:grid;place-items:center;border:1px solid rgba(255,255,255,.12)
+    }
+    .top-meta{font-size:13px;color:var(--muted);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .pill{
+      display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+      background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:12px
+    }
+    .main-layout{
+      flex:1;
+      display:grid;
+      grid-template-columns: 330px minmax(540px,1fr) 290px;
+      gap:14px;
+      padding:14px;
+      align-items:start;
+    }
+    .panel{
+      background:linear-gradient(180deg, rgba(11,34,58,.98), rgba(8,26,44,.98));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:18px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .panel .section{
+      padding:14px 14px 12px;
+      border-bottom:1px solid rgba(255,255,255,.06)
+    }
+    .panel .section:last-child{border-bottom:none}
+    .section-title{
+      font-size:14px;font-weight:800;color:#e7f0fb;margin-bottom:10px;letter-spacing:.2px
+    }
+    .small-muted{font-size:12px;color:var(--muted)}
+    .player-list{display:flex;flex-direction:column;gap:8px}
+    .player-item{
+      display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.03)
+    }
+    .dot{width:12px;height:12px;border-radius:999px}
+    .mini-badge{
+      font-size:10px;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.09);color:#cfe4ff
+    }
+    .resources-grid{
+      display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:8px
+    }
+    .res-box{
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.04)
+    }
+    .res-label{display:flex;align-items:center;gap:8px;font-size:14px}
+    .res-count{font-weight:800;font-size:22px}
+    .turn-card{
+      border-radius:16px;background:linear-gradient(180deg, rgba(39,119,168,.18), rgba(39,119,168,.06));
+      border:1px solid rgba(90,162,218,.22);padding:14px
+    }
+    .turn-name{font-size:22px;font-weight:800;margin-top:4px}
+    .big-btn{width:100%;padding:14px 16px;font-size:17px;font-weight:800;border-radius:14px;border:none;cursor:pointer}
+    .dice-wrap{
+      display:flex;justify-content:center;align-items:center;gap:10px;margin:12px 0 4px;font-size:30px;font-weight:900
+    }
+    .log-box{
+      max-height:250px;overflow:auto;padding-left:4px
+    }
+    .log-line{font-size:13px;line-height:1.55;color:#c9d8e8;margin-bottom:5px}
+    .center-panel{
+      background:linear-gradient(180deg, rgba(15,55,90,.88), rgba(9,33,57,.88));
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:22px;
+      box-shadow:var(--shadow);
+      padding:10px;
+      min-height:720px;
+    }
+    .board-head{
+      display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 10px 4px
+    }
+    .board-title{font-size:15px;font-weight:800}
+    .legend{display:flex;gap:8px;flex-wrap:wrap}
+    .legend-item{
+      display:flex;align-items:center;gap:6px;font-size:12px;color:#d9e7f5;
+      padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.05)
+    }
+    .board-wrap{
+      display:flex;justify-content:center;align-items:center;padding:8px
+    }
+    .board-hint{
+      margin-top:6px;text-align:center;font-size:12px;color:var(--muted)
+    }
+    .listy{display:flex;flex-direction:column;gap:8px}
+    .line-card{
+      padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.05)
+    }
+    .line-card b{color:#fff}
+    .tiny{font-size:11px;color:var(--muted)}
+    .footer-note{
+      font-size:11px;color:#8ea7bf;text-align:center;padding:8px
+    }
+    .board-svg text{user-select:none}
+    .tile-clickable{cursor:pointer}
+    .tile-clickable:hover .tile-shape{filter:brightness(1.06)}
+    .token{
+      fill:#faf7ee;stroke:#563b1d;stroke-width:2
+    }
+    .token-red{fill:#fff2f2;stroke:#8d2f2f}
+    .robber-tag{
+      font-size:18px;font-weight:700
+    }
+    @media (max-width: 1220px){
+      .main-layout{grid-template-columns:310px 1fr}
+      .right-panel{grid-column:1 / -1}
+    }
+    @media (max-width: 900px){
+      .main-layout{grid-template-columns:1fr}
+      .center-panel{min-height:auto}
+      .topbar{flex-wrap:wrap}
+      .resources-grid{grid-template-columns:repeat(3, minmax(0,1fr))}
+    }
+    @media (max-width: 560px){
+      .resources-grid{grid-template-columns:repeat(2, minmax(0,1fr))}
+      .card{padding:24px 18px}
+      .home-title{font-size:26px}
+      .main-layout{padding:10px;gap:10px}
+      .panel .section{padding:12px}
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+    import { getDatabase, ref, get, set, update, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA9dxSGE_bsJn7YEOf4wYu8vpNXfFDgsTc",
+      authDomain: "catan-44838.firebaseapp.com",
+      databaseURL: "https://catan-44838-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "catan-44838",
+      storageBucket: "catan-44838.firebasestorage.app",
+      messagingSenderId: "296003162886",
+      appId: "1:296003162886:web:7b83fd4563a0453edd8487",
+      measurementId: "G-8CCGZKJ9JW"
+    };
+
+    const RESOURCE_INFO = {
+      wood:   { name: "פרחים", icon: "🌸", color: "#d88fb1", short: "פרחים" },
+      brick:  { name: "חול", icon: "🏖️", color: "#d8c092", short: "חול" },
+      sheep:  { name: "חסות ועלים ירוקים", icon: "🥬", color: "#75c37a", short: "חסות" },
+      ore:    { name: "זרעים", icon: "🌱", color: "#7ab597", short: "זרעים" },
+      wheat:  { name: "עגבניות שרי", icon: "🍅", color: "#db6d57", short: "עגבניות" },
+      desert: { name: "דיונה", icon: "🏜️", color: "#c9ac74", short: "דיונה" }
+    };
+
+    const PIECES = {
+      road: "דרך בין מושבים",
+      settlement: "חממה",
+      city: "יישוב",
+      robber: "מחבל"
+    };
+
+    const DEV_INFO = [
+      { name: "מחבל", desc: "הזז את המחבל למשושה אחר וגנוב משאב משחקן סמוך - השלב של הגניבה יתווסף בהמשך." },
+      { name: "פריצת דרך", desc: "בונים 2 דרכים בין מושבים ללא עלות." },
+      { name: "יבול מבורך", desc: "לוקחים 2 משאבים לבחירה מהבנק." },
+      { name: "שיווק מרוכז", desc: "בוחרים משאב וכל השחקנים מעבירים אליך את כל הקלפים מהסוג הזה." },
+      { name: "חממה מצטיינת", desc: "נקודת ניצחון." },
+      { name: "משק השנה", desc: "נקודת ניצחון." },
+      { name: "יישוב פורח", desc: "נקודת ניצחון." },
+      { name: "חקלאות פורצת דרך", desc: "נקודת ניצחון." },
+      { name: "קהילה חזקה", desc: "נקודת ניצחון." }
+    ];
+
+    const BONUS_INFO = [
+      "מערך השמירה הגדול ביותר",
+      "דרך ההתיישבות הארוכה ביותר"
+    ];
+
+    const PLAYER_COLORS = ['#4aa1ff', '#ef5b5b', '#2db571', '#ffb02e'];
+    const ROOM_PARAM = new URLSearchParams(location.search).get('room')?.toUpperCase() || '';
+    const BOARD_POSITIONS = [
+      {q:0,r:0},{q:1,r:0},{q:2,r:0},
+      {q:-0.5,r:1},{q:0.5,r:1},{q:1.5,r:1},{q:2.5,r:1},
+      {q:-1,r:2},{q:0,r:2},{q:1,r:2},{q:2,r:2},{q:3,r:2},
+      {q:-0.5,r:3},{q:0.5,r:3},{q:1.5,r:3},{q:2.5,r:3},
+      {q:0,r:4},{q:1,r:4},{q:2,r:4}
+    ];
+
+    let appFb = null;
+    let db = null;
+    let firebaseReady = false;
+    let firebaseError = "";
+    let unsubscribeGame = null;
+
+    let myId = localStorage.getItem('myId') || crypto.randomUUID();
+    localStorage.setItem('myId', myId);
+
+    let myName = localStorage.getItem('myName') || '';
+    let gameState = null;
+    let currentScreen = 'home';
+    let gameCode = ROOM_PARAM;
+    let error = '';
+
+    function cleanCode(code) {
+      return (code || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    }
+
+    function roomRef(code) {
+      return ref(db, `games/${cleanCode(code)}`);
+    }
+
+    function newRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let out = '';
+      for (let i = 0; i < 4; i++) out += chars[Math.floor(Math.random() * chars.length)];
+      return out;
+    }
+
+    function normalizePlayers(players) {
+      return Array.isArray(players) ? players : Object.values(players || {});
+    }
+
+    function shuffle(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function generateBoard() {
+      const resources = shuffle([
+        'wood','wood','wood','wood',
+        'brick','brick','brick',
+        'sheep','sheep','sheep','sheep',
+        'ore','ore','ore',
+        'wheat','wheat','wheat','wheat',
+        'desert'
+      ]);
+
+      const numbers = shuffle([2,3,3,4,4,5,5,6,6,8,8,9,9,10,10,11,11,12]);
+      let n = 0;
+      const tiles = resources.map((resource, index) => ({
+        id: index,
+        resource,
+        number: resource === 'desert' ? null : numbers[n++]
+      }));
+
+      const robberIndex = tiles.findIndex(t => t.resource === 'desert');
+      return { tiles, robberIndex };
+    }
+
+    function totalResources(player) {
+      return Object.values(player?.resources || {}).reduce((a,b) => a + (Number(b) || 0), 0);
+    }
+
+    function devSummaryHtml() {
+      return DEV_INFO.map(card => `
+        <div class="line-card">
+          <div><b>${card.name}</b></div>
+          <div class="tiny">${card.desc}</div>
+        </div>
+      `).join('');
+    }
+
+    function bonusSummaryHtml() {
+      return BONUS_INFO.map(text => `
+        <div class="line-card"><b>${text}</b></div>
+      `).join('');
+    }
+
+    function legendHtml() {
+      return Object.entries(RESOURCE_INFO)
+        .filter(([k]) => k !== 'desert')
+        .map(([k,v]) => `<div class="legend-item"><span>${v.icon}</span><span>${v.short}</span></div>`)
+        .join('');
+    }
+
+    function describeTile(tile) {
+      const info = RESOURCE_INFO[tile.resource];
+      return tile.resource === 'desert'
+        ? `${info.icon} ${info.name}`
+        : `${info.icon} ${info.name} - ${tile.number}`;
+    }
+
+    function tileSvg(tile, index, isRobber, clickable) {
+      const size = 52;
+      const x = 108 + BOARD_POSITIONS[index].q * 86;
+      const y = 94 + BOARD_POSITIONS[index].r * 74;
+      const points = hexPoints(x, y, size);
+      const info = RESOURCE_INFO[tile.resource];
+      const tokenClass = (tile.number === 6 || tile.number === 8) ? 'token token-red' : 'token';
+      const clickAttrs = clickable ? `class="tile-clickable" onclick="window.handleTileClick(${index})"` : '';
+      return `
+        <g ${clickAttrs}>
+          <polygon class="tile-shape" points="${points}" fill="${info.color}" stroke="rgba(255,255,255,.75)" stroke-width="2"></polygon>
+          <text x="${x}" y="${y-18}" text-anchor="middle" font-size="25">${info.icon}</text>
+          <text x="${x}" y="${y+6}" text-anchor="middle" font-size="13" font-weight="700" fill="#1e2b36">${info.short}</text>
+          ${tile.number ? `
+            <circle class="${tokenClass}" cx="${x}" cy="${y+28}" r="17"></circle>
+            <text x="${x}" y="${y+34}" text-anchor="middle" font-size="18" font-weight="900" fill="#342515">${tile.number}</text>
+          ` : `
+            <text x="${x}" y="${y+31}" text-anchor="middle" font-size="15" font-weight="800" fill="#4f3a1d">דיונה</text>
+          `}
+          ${isRobber ? `
+            <g transform="translate(${x+24},${y-34})">
+              <circle cx="0" cy="0" r="14" fill="rgba(30,30,30,.88)" stroke="#fff" stroke-width="1.5"></circle>
+              <text x="0" y="6" text-anchor="middle" class="robber-tag">💣</text>
+            </g>
+          ` : ``}
+        </g>
+      `;
+    }
+
+    function hexPoints(cx, cy, r) {
+      const pts = [];
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 180 * (60 * i - 30);
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      }
+      return pts.join(' ');
+    }
+
+    function renderBoard(board, allowRobberMove) {
+      if (!board?.tiles?.length) {
+        return `<div class="board-hint">הלוח נבנה בתחילת המשחק.</div>`;
+      }
+
+      return `
+        <svg class="board-svg" viewBox="0 0 430 470" style="width:100%;max-width:760px;height:auto">
+          <rect x="0" y="0" width="430" height="470" rx="28" fill="#2777a8"></rect>
+          <g transform="translate(8,10)">
+            ${board.tiles.map((tile, i) => tileSvg(tile, i, board.robberIndex === i, allowRobberMove)).join('')}
+          </g>
+        </svg>
+      `;
+    }
+
+    async function initFirebase() {
+      try {
+        appFb = initializeApp(firebaseConfig);
+        db = getDatabase(appFb);
+        firebaseReady = true;
+        render();
+      } catch (e) {
+        console.error(e);
+        firebaseError = `Firebase לא התחבר: ${e.message}`;
+        render();
+      }
+    }
+
+    function subscribeToGame(code) {
+      if (unsubscribeGame) unsubscribeGame();
+
+      unsubscribeGame = onValue(roomRef(code), snapshot => {
+        const state = snapshot.val();
+        if (!state) {
+          if (currentScreen !== 'home') {
+            error = 'החדר כבר לא קיים';
+            currentScreen = 'home';
+          }
+          gameState = null;
+          render();
+          return;
+        }
+
+        gameState = state;
+        currentScreen = state.phase === 'playing' ? 'game' : 'lobby';
+        render();
+      }, err => {
+        console.error(err);
+        error = `שגיאת Firebase: ${err.message}`;
+        render();
+      });
+    }
+
+    async function createGame() {
+      if (!firebaseReady) {
+        error = firebaseError || 'Firebase עדיין לא מחובר';
+        render();
+        return;
+      }
+
+      myName = document.getElementById('nameInput')?.value?.trim() || myName.trim();
+      if (!myName) {
+        error = 'הכנס שם';
+        render();
+        return;
+      }
+      localStorage.setItem('myName', myName);
+
+      let code;
+      let exists = true;
+      for (let i = 0; i < 8 && exists; i++) {
+        code = newRoomCode();
+        exists = (await get(roomRef(code))).exists();
+      }
+      if (exists) {
+        error = 'לא הצלחתי ליצור קוד חדר. נסה שוב.';
+        render();
+        return;
+      }
+
+      gameCode = code;
+      gameState = {
+        code,
+        phase: 'lobby',
+        title: 'המתיישבים - גרסת הגוש',
+        players: [{ id: myId, name: myName }],
+        host: myId,
+        createdAt: Date.now(),
+        lastUpdate: Date.now()
+      };
+
+      try {
+        await set(roomRef(gameCode), gameState);
+        history.replaceState({}, '', `${location.pathname}?room=${gameCode}`);
+        currentScreen = 'lobby';
+        error = '';
+        subscribeToGame(gameCode);
+      } catch (e) {
+        console.error(e);
+        error = `לא ניתן ליצור משחק: ${e.message}`;
+        render();
+      }
+    }
+
+    async function joinGame(code) {
+      if (!firebaseReady) {
+        error = firebaseError || 'Firebase עדיין לא מחובר';
+        render();
+        return;
+      }
+
+      myName = document.getElementById('nameInput')?.value?.trim() || myName.trim();
+      code = cleanCode(code);
+
+      if (!myName) {
+        error = 'הכנס שם';
+        render();
+        return;
+      }
+      if (code.length !== 4) {
+        error = 'קוד לא תקין';
+        render();
+        return;
+      }
+
+      localStorage.setItem('myName', myName);
+
+      try {
+        const result = await runTransaction(roomRef(code), current => {
+          if (current === null) return current;
+
+          const players = normalizePlayers(current.players);
+          const existingIndex = players.findIndex(p => p.id === myId);
+
+          if (current.phase !== 'lobby' && existingIndex === -1) {
+            return current;
+          }
+
+          if (existingIndex === -1) {
+            if (players.length >= 4) return current;
+            players.push({ id: myId, name: myName });
+          } else {
+            players[existingIndex].name = myName;
+          }
+
+          current.players = players;
+          current.lastUpdate = Date.now();
+          return current;
+        }, { applyLocally: false });
+
+        const state = result.snapshot.val();
+        if (!state) {
+          error = `משחק לא נמצא (קוד: ${code})`;
+          render();
+          return;
+        }
+
+        const players = normalizePlayers(state.players);
+        if (state.phase !== 'lobby' && !players.some(p => p.id === myId)) {
+          error = 'המשחק כבר התחיל';
+          render();
+          return;
+        }
+        if (!players.some(p => p.id === myId)) {
+          error = players.length >= 4 ? 'המשחק מלא' : 'לא ניתן להצטרף למשחק';
+          render();
+          return;
+        }
+
+        gameCode = code;
+        gameState = state;
+        currentScreen = state.phase === 'playing' ? 'game' : 'lobby';
+        error = '';
+        history.replaceState({}, '', `${location.pathname}?room=${gameCode}`);
+        subscribeToGame(gameCode);
+      } catch (e) {
+        console.error(e);
+        error = `שגיאה בהצטרפות: ${e.message}`;
+        render();
+      }
+    }
+
+    async function startGame() {
+      if (!firebaseReady || !gameCode || !gameState) return;
+      if (gameState.host !== myId) return;
+
+      const players = normalizePlayers(gameState.players);
+      if (players.length < 2) {
+        error = 'צריך לפחות 2 שחקנים';
+        render();
+        return;
+      }
+
+      const board = generateBoard();
+      const nextState = {
+        ...gameState,
+        phase: 'playing',
+        board,
+        players: players.map((p, i) => ({
+          ...p,
+          color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+          resources: { wood: 0, brick: 0, sheep: 0, ore: 0, wheat: 0 },
+          vp: 0,
+          pieces: { roads: 0, greenhouses: 0, villages: 0 },
+          devCards: 0
+        })),
+        currentPlayer: 0,
+        turnPhase: 'preroll',
+        dice: null,
+        log: ['🌱 המשחק התחיל!', `🏜️ המחבל מתחיל על הדיונה.`, `📦 שלב הבנייה וחלוקת משאבים מלאה יתווספו בהמשך, אך הלוח והמחבל כבר פעילים.`],
+        lastUpdate: Date.now()
+      };
+
+      await set(roomRef(gameCode), nextState);
+    }
+
+    async function rollDice() {
+      if (!firebaseReady || !gameState) return;
+
+      const players = normalizePlayers(gameState.players);
+      const myIndex = players.findIndex(p => p.id === myId);
+      if (myIndex !== gameState.currentPlayer || gameState.turnPhase !== 'preroll') return;
+
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      const total = d1 + d2;
+      const log = [...(gameState.log || []), `🎲 ${players[myIndex].name} הטיל ${d1}+${d2}=${total}`];
+
+      let nextPhase = 'postroll';
+      if (total === 7) {
+        nextPhase = 'moveRobber';
+        log.push(`💣 יצא 7 - הזז את המחבל למשושה אחר.`);
+      } else {
+        const matching = (gameState.board?.tiles || []).filter(t => t.number === total);
+        if (matching.length) {
+          log.push(`🧭 הופעלו ${matching.length} משבצות מספר ${total}. חלוקת משאבים מלאה תתווסף עם שלב הבנייה.`);
+        }
+      }
+
+      await update(roomRef(gameCode), {
+        dice: [d1, d2],
+        turnPhase: nextPhase,
+        log,
+        lastUpdate: Date.now()
+      });
+    }
+
+    async function moveRobber(tileIndex) {
+      if (!firebaseReady || !gameState?.board) return;
+      const players = normalizePlayers(gameState.players);
+      const myIndex = players.findIndex(p => p.id === myId);
+      if (myIndex !== gameState.currentPlayer || gameState.turnPhase !== 'moveRobber') return;
+      if (tileIndex === gameState.board.robberIndex) return;
+
+      const tile = gameState.board.tiles[tileIndex];
+      const board = { ...gameState.board, robberIndex: tileIndex };
+      const log = [...(gameState.log || []), `💣 ${players[myIndex].name} העביר את המחבל אל ${describeTile(tile)}.`];
+
+      await update(roomRef(gameCode), {
+        board,
+        turnPhase: 'postroll',
+        log,
+        lastUpdate: Date.now()
+      });
+    }
+
+    async function endTurn() {
+      if (!firebaseReady || !gameState) return;
+      const players = normalizePlayers(gameState.players);
+      const myIndex = players.findIndex(p => p.id === myId);
+      if (myIndex !== gameState.currentPlayer || !['postroll'].includes(gameState.turnPhase)) return;
+
+      const nextP = (gameState.currentPlayer + 1) % players.length;
+      const log = [...(gameState.log || []), `➡️ תור של ${players[nextP].name}`];
+
+      await update(roomRef(gameCode), {
+        currentPlayer: nextP,
+        turnPhase: 'preroll',
+        dice: null,
+        log,
+        lastUpdate: Date.now()
+      });
+    }
+
+    async function copyGameLink() {
+      const url = `${location.origin}${location.pathname}?room=${gameCode}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('הקישור הועתק! שלח אותו לחברים.');
+      } catch {
+        prompt('העתק את הקישור:', url);
+      }
+    }
+
+    function leaveRoom() {
+      if (unsubscribeGame) {
+        unsubscribeGame();
+        unsubscribeGame = null;
+      }
+      gameCode = '';
+      gameState = null;
+      currentScreen = 'home';
+      history.replaceState({}, '', location.pathname);
+      render();
+    }
+
+    function homeScreen() {
+      const status = firebaseError
+        ? `<div class="status" style="background:#ffe9e9;color:#b11d1d;border-color:#f2bbbb">${firebaseError}</div>`
+        : `<div class="status">${firebaseReady ? '✅ מחובר ל-Firebase' : '⏳ מתחבר ל-Firebase...'}</div>`;
+
+      return `
+        <div class="page-wrap">
+          <div class="card">
+            <div style="font-size:48px;margin-bottom:8px">🌱</div>
+            <div class="home-title">המתיישבים - גרסת הגוש</div>
+            <div class="subtitle">קאטן בעיצוב גוש קטיף - גרסת Firebase מרובת משתתפים</div>
+            ${status}
+            ${error ? `<div class="err">${error}</div>` : ``}
+            <input id="nameInput" class="field" placeholder="השם שלך" value="${myName}" />
+            <div style="height:12px"></div>
+            <button id="createBtn" class="btn btn-primary" style="width:100%">🎮 צור משחק חדש</button>
+            <div style="height:12px"></div>
+            <div class="row">
+              <input id="codeInput" class="field" maxlength="4" placeholder="קוד משחק" value="${gameCode || ''}" style="text-align:center;letter-spacing:4px;font-weight:800" />
+              <button id="joinBtn" class="btn btn-green" style="flex:0 0 110px">הצטרף</button>
+            </div>
+            <div style="height:14px"></div>
+            <div class="small-muted">שמות מותאמים: פרחים, חול, חסות, זרעים, עגבניות שרי, דיונה, מחבל, חממה, יישוב ודרך בין מושבים.</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function lobbyScreen() {
+      const players = normalizePlayers(gameState?.players);
+      const isHost = gameState?.host === myId;
+
+      return `
+        <div class="page-wrap">
+          <div class="card" style="max-width:450px">
+            <div class="status" style="background:#ecf8ef;color:#1f6c43;border-color:#ccead7">✅ מחובר בזמן אמת</div>
+            <div class="home-title" style="font-size:27px">ממתינים לשחקנים...</div>
+            ${error ? `<div class="err" style="margin-top:12px">${error}</div>` : ``}
+            <div style="background:#fff;border-radius:16px;padding:16px;margin:16px 0;border:2px dashed #d7c7aa;text-align:center">
+              <div class="small-muted" style="margin-bottom:4px">קוד המשחק</div>
+              <div style="font-size:40px;font-weight:900;color:#2563eb;letter-spacing:8px">${gameCode}</div>
+              <button id="copyBtn" class="btn btn-orange" style="margin-top:10px">🔗 העתק קישור</button>
+            </div>
+            <div class="section-title" style="color:#2b2318">שחקנים (${players.length}/4)</div>
+            <div class="player-list" style="margin-bottom:16px">
+              ${players.map((p, i) => `
+                <div class="player-item" style="background:#f8f4ec">
+                  <div class="dot" style="background:${PLAYER_COLORS[i % PLAYER_COLORS.length]}"></div>
+                  <div style="font-size:15px">${p.name}</div>
+                  <div style="display:flex;gap:4px">
+                    ${p.id === gameState.host ? `<span class="mini-badge" style="background:#eceff3;color:#51647a">(מארח)</span>` : ``}
+                    ${p.id === myId ? `<span class="mini-badge" style="background:#e8f0ff;color:#2457ad">(אתה)</span>` : ``}
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+            ${isHost && players.length >= 2 ? `
+              <button id="startBtn" class="btn btn-primary" style="width:100%">🚀 התחל משחק</button>
+            ` : isHost ? `
+              <div class="small-muted">צריך לפחות 2 שחקנים כדי להתחיל.</div>
+            ` : `
+              <div class="small-muted">ממתין שהמארח יתחיל.</div>
+            `}
+            <div style="height:12px"></div>
+            <button id="leaveBtn" class="btn btn-ghost">חזרה למסך הראשי</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function gameScreen() {
+      const players = normalizePlayers(gameState?.players);
+      const meIndex = players.findIndex(p => p.id === myId);
+      const me = players[meIndex];
+      const curPlayer = players[gameState?.currentPlayer];
+      const myTurn = meIndex >= 0 && gameState?.currentPlayer === meIndex;
+      const allowRobberMove = myTurn && gameState?.turnPhase === 'moveRobber';
+
+      return `
+        <div class="game-shell">
+          <div class="topbar">
+            <div class="brand">
+              <div class="brand-badge">🌱</div>
+              <div>המתיישבים - גרסת הגוש</div>
+            </div>
+            <div class="top-meta">
+              <span class="pill">חדר ${gameCode}</span>
+              <span class="pill">תור: <b style="color:${curPlayer?.color || '#fff'}">${curPlayer?.name || ''}</b></span>
+              ${gameState?.dice ? `<span class="pill">🎲 ${gameState.dice[0]} + ${gameState.dice[1]} = ${gameState.dice[0] + gameState.dice[1]}</span>` : `<span class="pill">🎲 טרם הוטלו קוביות</span>`}
+            </div>
+          </div>
+
+          <div class="main-layout">
+            <div class="panel">
+              <div class="section">
+                <div class="section-title">התור שלך</div>
+                <div class="turn-card">
+                  <div class="small-muted">${myTurn ? 'זה הרגע שלך' : 'השחקן הפעיל כרגע'}</div>
+                  <div class="turn-name" style="color:${myTurn ? '#fff' : (curPlayer?.color || '#fff')}">${myTurn ? 'אתה' : (curPlayer?.name || '')}</div>
+
+                  ${gameState?.dice ? `
+                    <div class="dice-wrap">
+                      <span>${gameState.dice[0]}</span><span>+</span><span>${gameState.dice[1]}</span><span>=</span><span>${gameState.dice[0] + gameState.dice[1]}</span>
+                    </div>
+                  ` : ''}
+
+                  ${myTurn && gameState?.turnPhase === 'preroll' ? `
+                    <div style="margin-top:10px"><button id="rollBtn" class="big-btn btn-red">🎲 הטל קוביות</button></div>
+                  ` : ''}
+
+                  ${allowRobberMove ? `
+                    <div style="margin-top:10px" class="small-muted">בחר משושה על הלוח כדי להעביר אליו את המחבל.</div>
+                  ` : ''}
+
+                  ${myTurn && gameState?.turnPhase === 'postroll' ? `
+                    <div style="margin-top:10px"><button id="endBtn" class="big-btn btn-orange">סיים תור</button></div>
+                  ` : ''}
+
+                  ${!myTurn ? `<div style="margin-top:10px" class="small-muted">ממתין לתור שלך.</div>` : ``}
+                </div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">המשאבים שלי</div>
+                ${me ? `
+                  <div class="resources-grid">
+                    ${['sheep','wheat','brick','wood','ore'].map(key => `
+                      <div class="res-box" title="${RESOURCE_INFO[key].name}">
+                        <div class="res-label"><span>${RESOURCE_INFO[key].icon}</span><span>${RESOURCE_INFO[key].short}</span></div>
+                        <div class="res-count">${me.resources?.[key] || 0}</div>
+                      </div>
+                    `).join('')}
+                  </div>
+                  <div style="height:10px"></div>
+                  <div class="small-muted">סה"כ משאבים: ${totalResources(me)}</div>
+                ` : `<div class="small-muted">לא נמצא שחקן תואם.</div>`}
+              </div>
+
+              <div class="section">
+                <div class="section-title">השחקנים במשחק</div>
+                <div class="player-list">
+                  ${players.map((p, i) => `
+                    <div class="player-item">
+                      <div class="dot" style="background:${p.color || PLAYER_COLORS[i % PLAYER_COLORS.length]}"></div>
+                      <div>
+                        <div style="font-weight:700">${p.name}</div>
+                        <div class="tiny">נק' ניצחון: ${p.vp || 0} | חממות: ${p.pieces?.greenhouses || 0} | יישובים: ${p.pieces?.villages || 0}</div>
+                      </div>
+                      <div>${p.id === myId ? `<span class="mini-badge">(אתה)</span>` : ``}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">יומן</div>
+                <div class="log-box">
+                  ${(gameState?.log || []).slice(-14).reverse().map(line => `<div class="log-line">${line}</div>`).join('')}
+                </div>
+              </div>
+            </div>
+
+            <div class="center-panel">
+              <div class="board-head">
+                <div>
+                  <div class="board-title">הלוח</div>
+                  <div class="small-muted">עיצוב משופר בלי להגדיל מדי את הבנייה - ובמונחים של הגוש.</div>
+                </div>
+                <div class="legend">${legendHtml()}</div>
+              </div>
+
+              <div class="board-wrap">
+                ${renderBoard(gameState?.board, allowRobberMove)}
+              </div>
+
+              <div class="board-hint">
+                ${allowRobberMove
+                  ? 'בחר משבצת כדי להעביר אליה את המחבל.'
+                  : `המחבל כרגע על: ${gameState?.board?.tiles?.[gameState?.board?.robberIndex] ? describeTile(gameState.board.tiles[gameState.board.robberIndex]) : 'לא ידוע'}`}
+              </div>
+
+              <div class="footer-note">
+                שלב זה כולל לוח מלא, שמות מותאמים, מחבל על הדיונה, והעברת מחבל כאשר יוצא 7.
+              </div>
+            </div>
+
+            <div class="panel right-panel">
+              <div class="section">
+                <div class="section-title">מילון קלפי פיתוח</div>
+                <div class="listy">${devSummaryHtml()}</div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">הבונוסים הגדולים</div>
+                <div class="listy">${bonusSummaryHtml()}</div>
+              </div>
+
+              <div class="section">
+                <div class="section-title">מונחים במשחק</div>
+                <div class="listy">
+                  <div class="line-card"><b>דרך</b> - ${PIECES.road}</div>
+                  <div class="line-card"><b>יישוב</b> - ${PIECES.settlement}</div>
+                  <div class="line-card"><b>עיר</b> - ${PIECES.city}</div>
+                  <div class="line-card"><b>שודד / אביר</b> - ${PIECES.robber}</div>
+                </div>
+              </div>
+
+              <div class="section">
+                <button id="copyBtn2" class="btn btn-green" style="width:100%">🔗 העתק קישור לחדר</button>
+                <div style="height:10px"></div>
+                <button id="leaveBtn2" class="btn btn-ghost" style="width:100%;text-align:center">יציאה למסך הראשי</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      if (currentScreen === 'home') {
+        app.innerHTML = homeScreen();
+        document.getElementById('createBtn').onclick = createGame;
+        document.getElementById('joinBtn').onclick = () => joinGame(document.getElementById('codeInput').value);
+        document.getElementById('codeInput').addEventListener('keydown', e => {
+          if (e.key === 'Enter') joinGame(e.target.value);
+        });
+      } else if (currentScreen === 'lobby') {
+        app.innerHTML = lobbyScreen();
+        document.getElementById('copyBtn').onclick = copyGameLink;
+        document.getElementById('leaveBtn').onclick = leaveRoom;
+        const startBtn = document.getElementById('startBtn');
+        if (startBtn) startBtn.onclick = startGame;
+      } else {
+        app.innerHTML = gameScreen();
+        const rollBtn = document.getElementById('rollBtn');
+        if (rollBtn) rollBtn.onclick = rollDice;
+        const endBtn = document.getElementById('endBtn');
+        if (endBtn) endBtn.onclick = endTurn;
+        document.getElementById('copyBtn2').onclick = copyGameLink;
+        document.getElementById('leaveBtn2').onclick = leaveRoom;
+      }
+    }
+
+    window.handleTileClick = (index) => moveRobber(index);
+
+    render();
+    await initFirebase();
+
+    if (gameCode) {
+      subscribeToGame(gameCode);
+    }
+  </script>
+</body>
+</html>
